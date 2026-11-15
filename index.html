@@ -229,15 +229,29 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--green); out
 .map-bottom { display: flex; justify-content: center; padding-bottom: calc(var(--bottom) + 14px); }
 .map-bottom .btn-primary { width: 178px; height: 62px; font-size: 27px; border-radius: 26px; }
 .pulse { animation: pulse 2.2s ease-out infinite; }
+
+/* ---------- map furniture and the puzzle header, laid out like a classic nonogram app ---------- */
+.zone-k { opacity: 1; fill: #F0806B; }
+.zone-n { stroke: none; paint-order: normal; }
+.map-top { background: none; }
+.map-top .icon-btn { background: #FFFDF6; border: 3px solid var(--ink-line); border-radius: 16px; width: 46px; height: 46px; box-shadow: 0 3px 0 var(--ink-line); margin-left: 8px; }
+.map-bottom .btn-primary { width: 150px; height: 54px; font-size: 23px; border-radius: 22px; }
+.levels .level { display: flex; align-items: center; justify-content: space-between; padding: 0 20px; width: 100%; }
+.levels .level small { font-family: var(--font); font-weight: 600; font-size: 14px; color: #7B6F8C; }
+.play-top { justify-content: space-between; }
+.play-title { position: absolute; left: 0; right: 0; top: calc(var(--top) + 6px); margin: 0; align-items: center; pointer-events: none; }
+.play-title strong { font-size: 21px; }
+#hearts { position: absolute; left: 0; right: 0; top: calc(var(--top) + 54px); justify-content: center; margin: 0; gap: 4px; pointer-events: none; }
+#hearts .heart svg { width: 30px; height: 30px; }
+#board-wrap { margin-top: 34px; }
 </style>
 </head>
 <body>
 <div id="app">
   <section id="map" class="screen on" aria-label="Journey map">
     <header class="bar map-top">
-      <div class="brand"><span id="brand-mark"></span><span class="brand-name">pichigram</span></div>
+      <div></div>
       <div class="bar-actions">
-        <button id="btn-friends" class="icon-btn" aria-label="Friends"></button>
         <button id="btn-settings" class="icon-btn" aria-label="Settings"></button>
       </div>
     </header>
@@ -399,6 +413,7 @@ function nextMove(clues, w, h, known) {
 return { runsOf, cluesFor, solveLine, solve, nextMove };
 })();
 __m['puzzles'] = (() => {
+const { cluesFor, solve } = __m['solver'];
 // Puzzle art. '#' is a filled cell. Every puzzle listed in JOURNEY is checked by
 // tools/verify.mjs to be solvable by line logic alone (no guessing).
 // tone: which spot colour the finished picture is printed in.
@@ -663,7 +678,54 @@ function setJourney(seed) {
   for (const id of JOURNEY) if (id !== 'hello' && rnd() < 0.5) FLIP[id] = true;     // a mirrored picture solves just the same
 }
 
+// ---------- generated puzzles ----------
+// "Play" makes a brand-new puzzle every time. Each one is kept only if line logic alone solves it,
+// so it never needs a guess. An id like g:hard:12345 always rebuilds the same puzzle.
+const LEVELS = {
+  easy: { name: 'Easy', size: 10, maxPasses: 4, fallback: 'teacup' },
+  medium: { name: 'Medium', size: 10, minPasses: 5, fallback: 'umbrella' },
+  hard: { name: 'Hard', size: 15, fallback: 'anchor' },
+  expert: { name: 'Expert', size: 20, fallback: 'liftoff' },
+};
+const TONE_NAMES = ['peri', 'coral', 'sage', 'gold'];
+const made = new Map();
+
+function generate(level, seed) {
+  const L = LEVELS[level], n = L.size;
+  let spare = null;
+  for (let attempt = 0; attempt < 500; attempt++) {
+    const rnd = seeded((seed ^ 0x5bd1e995) + attempt * 104729);
+    const mirror = rnd() < 0.55, density = 0.5 + rnd() * 0.16;
+    let g = Array.from({ length: n }, () => Array.from({ length: n }, () => (rnd() < density ? 1 : 0)));
+    if (mirror) for (const row of g) for (let x = 0; x < n >> 1; x++) row[n - 1 - x] = row[x];
+    // One smoothing pass turns noise into rounded shapes, which read better and solve by logic more often.
+    g = g.map((row, y) => row.map((v, x) => {
+      let c = 0;
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) c += (g[y + dy] && g[y + dy][x + dx]) ? 1 : 0;
+      return c >= 5 || (c === 4 && v) ? 1 : 0;
+    }));
+    const filled = g.flat().reduce((a, b) => a + b, 0) / (n * n);
+    if (filled < 0.36 || filled > 0.78) continue;
+    const res = solve(cluesFor(g), n, n);
+    if (!res.solved) continue;
+    if ((L.maxPasses && res.passes > L.maxPasses) || (L.minPasses && res.passes < L.minPasses)) { spare = spare || g; continue; }
+    return g;
+  }
+  return spare || ART[L.fallback].art.map(r => [...r].map(c => (c === '#' ? 1 : 0)));
+}
+
+function newPuzzleId(level) { return `g:${level}:${1 + Math.floor(Math.random() * 2147483000)}`; }
+
 function getPuzzle(id) {
+  if (id === '?') return { id, name: '', tone: 'peri', grid: [[0]], w: 0, h: 0 };       // a stop not played yet
+  if (id.startsWith('g:')) {
+    if (!made.has(id)) {
+      const [, level, seed] = id.split(':');
+      const grid = generate(level, +seed);
+      made.set(id, { id, name: LEVELS[level].name, level: LEVELS[level].name, tone: TONE_NAMES[+seed % 4], grid, h: grid.length, w: grid[0].length });
+    }
+    return made.get(id);
+  }
   const p = ART[id];
   const rows = FLIP[id] ? p.art.map(r => [...r].reverse().join('')) : p.art;
   const grid = rows.map(r => [...r].map(c => (c === '#' ? 1 : 0)));
@@ -672,7 +734,7 @@ function getPuzzle(id) {
 
 const ALL_IDS = Object.keys(ART);
 
-return { SPARE, JOURNEY, setJourney, getPuzzle, ALL_IDS };
+return { SPARE, JOURNEY, setJourney, LEVELS, newPuzzleId, getPuzzle, ALL_IDS };
 })();
 __m['store'] = (() => {
 // Saved progress, kept on the device.
@@ -680,6 +742,7 @@ const KEY = 'nib.save.v1';
 
 const fresh = () => ({
   v: 1,
+  path: ['hello'],     // the puzzle at each stop reached so far; the first stop is the tutorial
   seed: 1 + Math.floor(Math.random() * 2147483000),   // decides this game's puzzle set and order
   solved: [],          // puzzle ids
   boards: {},          // puzzle id -> cell string for a puzzle in progress
@@ -692,7 +755,7 @@ const fresh = () => ({
 function load() {
   try {
     const raw = localStorage.getItem(KEY);
-    if (raw) { const old = JSON.parse(raw); if (old.seed == null) old.seed = 0; return Object.assign(fresh(), old); }   // games begun before shuffling keep their order
+    if (raw) { const old = JSON.parse(raw); if (old.seed == null) old.seed = 0; if (old.path == null) old.path = null; return Object.assign(fresh(), old); }   // games begun before shuffling keep their order
   } catch (_) {}
   return fresh();
 }
@@ -722,16 +785,23 @@ function ctx() {
   return ac;
 }
 
-function blip(freq, dur, vol = 0.05, type = 'sine', delay = 0) {
+// A soft mallet note. Phone speakers barely reproduce anything under about 300 Hz, so notes sit
+// in the octave above that, with a quieter octave on top for presence and a gentle attack so nothing clicks.
+function blip(freq, dur, vol = 0.2, type = 'sine', delay = 0) {
   if (!state.sound) return;
   const a = ctx(); if (!a) return;
-  const t = a.currentTime + delay, o = a.createOscillator(), g = a.createGain();
-  o.type = type; o.frequency.setValueAtTime(freq, t);
+  const t = a.currentTime + delay, g = a.createGain();
   g.gain.setValueAtTime(0, t);
-  g.gain.linearRampToValueAtTime(vol, t + 0.008);
+  g.gain.linearRampToValueAtTime(vol, t + 0.014);
   g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-  o.connect(g).connect(a.destination);
-  o.start(t); o.stop(t + dur + 0.02);
+  g.connect(a.destination);
+  for (const [mult, level] of [[1, 1], [2, 0.3]]) {
+    const o = a.createOscillator(), og = a.createGain();
+    o.type = type; o.frequency.setValueAtTime(freq * mult, t);
+    og.gain.value = level;
+    o.connect(og).connect(g);
+    o.start(t); o.stop(t + dur + 0.03);
+  }
 }
 
 // kind: 'light' | 'soft' | 'success'. Uses the iPhone app's haptics when present, else Android vibration.
@@ -742,18 +812,18 @@ const buzz = (ms, kind = 'light') => {
   if (navigator.vibrate) { try { navigator.vibrate(ms); } catch (_) {} }
 };
 
-// Low, quiet, rounded notes from one warm chord, so nothing pierces.
+// One warm chord (C, E, G), an octave where phones can play it.
 const sfx = {
-  fill() { blip(262, 0.22, 0.15, 'sine'); buzz(6); },
-  mark() { blip(196, 0.2, 0.12, 'sine'); buzz(4, 'soft'); },
-  clear() { blip(175, 0.18, 0.09, 'sine'); },
-  tap() { blip(220, 0.16, 0.09, 'sine'); },
-  undo() { blip(196, 0.16, 0.09, 'sine'); },
-  hint() { blip(330, 0.3, 0.11, 'sine'); blip(392, 0.36, 0.1, 'sine', 0.12); },
-  line() { blip(330, 0.3, 0.11, 'sine'); blip(392, 0.36, 0.1, 'sine', 0.09); },
-  miss() { blip(131, 0.3, 0.2, 'sine'); blip(117, 0.36, 0.17, 'sine', 0.12); buzz(30); },
-  win() { [262, 330, 392, 523].forEach((f, i) => blip(f, 0.9, 0.14, 'sine', i * 0.2)); buzz([12, 40, 18], 'success'); },
-  hop() { blip(294, 0.25, 0.11, 'sine'); blip(392, 0.3, 0.11, 'sine', 0.14); },
+  fill() { blip(523, 0.26, 0.34); buzz(6); },
+  mark() { blip(392, 0.24, 0.3); buzz(4, 'soft'); },
+  clear() { blip(349, 0.2, 0.22); },
+  tap() { blip(440, 0.18, 0.2); },
+  undo() { blip(392, 0.18, 0.2); },
+  hint() { blip(659, 0.34, 0.28); blip(784, 0.42, 0.26, 'sine', 0.12); },
+  line() { blip(659, 0.34, 0.28); blip(784, 0.42, 0.26, 'sine', 0.09); },
+  miss() { blip(311, 0.34, 0.36); blip(262, 0.42, 0.34, 'sine', 0.13); buzz(30); },
+  win() { [523, 659, 784, 1047].forEach((f, i) => blip(f, 1.0, 0.3, 'sine', i * 0.2)); buzz([12, 40, 18], 'success'); },
+  hop() { blip(587, 0.28, 0.26); blip(784, 0.34, 0.26, 'sine', 0.14); },
 };
 
 return { sfx };
@@ -818,7 +888,7 @@ const ICON = {
   undo: I('<path d="M9 14L4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/>'),
   redo: I('<path d="M15 14l5-5-5-5"/><path d="M20 9H10a6 6 0 0 0 0 12h3"/>'),
   friends: I('<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.6-3.4 3.2-5.5 6.5-5.5s5.9 2.1 6.5 5.5"/><path d="M16 4.8a3.5 3.5 0 0 1 0 6.4M18.5 14.9c1.6.9 2.7 2.6 3 5.1"/>'),
-  settings: I('<path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/>'),
+  settings: '<svg width="26" height="26" viewBox="0 0 24 24" aria-hidden="true"><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" fill="#F2B441" stroke="#1E122C" stroke-width="1.7" stroke-linejoin="round"/><circle cx="12" cy="12" r="3.1" fill="#FFFDF6" stroke="#1E122C" stroke-width="1.7"/></svg>',
   fit: I('<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>'),
   fill: '<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="2" width="12" height="12" rx="2.5" fill="currentColor"/></svg>',
   heart: '<svg width="26" height="26" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20.5s-7.5-4.6-7.5-10.2A4.3 4.3 0 0 1 12 7.6a4.3 4.3 0 0 1 7.5 2.7c0 5.6-7.5 10.2-7.5 10.2z" fill="currentColor" stroke="#1E122C" stroke-width="1.8" stroke-linejoin="round"/></svg>',
@@ -918,8 +988,7 @@ class Board {
       base = Math.min((this.cw - 2 * pad - gw) / this.w, (this.ch - 2 * pad - gh) / this.h, 48);
     }
     this.base = base; this.f0 = f; this.gw0 = gw; this.gh0 = gh; this.pad = pad;
-    const m = clamp(46 / base, 1, 3.2);
-    this.maxS = m < 1.15 ? 1 : m;
+    this.maxS = clamp(Math.max(2.4, 46 / base), 1, 3.6);     // every board can be pinched in, small ones too
     this.s = clamp(this.s, 1, this.maxS);
     this.draw();
   }
@@ -1346,11 +1415,11 @@ const { JOURNEY, getPuzzle } = __m['puzzles'];
 const { asset, thumbMarkup, TONES, BODIES } = __m['art'];
 
 const MAP_W = 390;
-const STEP = 150, BOTTOM = 210, TOP = 230;
+const STEP = 150, BOTTOM = 210, TOP = 380;
 const ZONES = [
   { at: 0, name: 'Meadow Gate', props: ['grass', 'grass-daisy', 'tulips', 'daisies', 'clover', 'bush', 'grass'] },
-  { at: 4, name: 'Pond Side', props: ['pond', 'cattails', 'pebbles', 'log', 'mushrooms', 'grass', 'cattails'] },
-  { at: 8, name: 'Hilltop', props: ['tree', 'sapling', 'signpost', 'nest', 'cloud', 'bush', 'grass-daisy'] },
+  { at: 10, name: 'Pond Side', props: ['pond', 'cattails', 'pebbles', 'log', 'mushrooms', 'grass', 'cattails'] },
+  { at: 20, name: 'Hilltop', props: ['tree', 'sapling', 'signpost', 'nest', 'tulips', 'bush', 'grass-daisy'] },
 ];
 // Drawn size of each prop on the map, in map units.
 const PROP_SIZE = { grass: 40, 'grass-daisy': 46, bush: 62, sapling: 54, tulips: 50, daisies: 48, mushrooms: 48, clover: 40,
@@ -1401,7 +1470,7 @@ function pathXAt(pts, y) {
 // Scenery: sticker props scattered beside the path, themed by zone.
 function decor(pts, H) {
   const r = rng(29), out = [], placed = [];
-  for (let n = 0, tries = 0; n < 30 && tries < 900; tries++) {
+  for (let n = 0, tries = 0; n < JOURNEY.length * 2.4 && tries < 4000; tries++) {
     const y = 120 + r() * (H - 260), x = 34 + r() * (MAP_W - 68);
     if (Math.abs(x - pathXAt(pts, y)) < 92) continue;
     if (placed.some(p => Math.hypot(p.x - x, p.y - y) < 96)) continue;
@@ -1423,6 +1492,10 @@ function renderMap(root, state) {
   const { H, pts } = layout(), n = JOURNEY.length, cur = state.cur;
   const segs = segments(pts), start = `M${pts[0].x.toFixed(1)} ${pts[0].y.toFixed(1)}`;
   const reach = Math.min(cur, n - 1);
+  // Beyond the last stop the road runs on into the mist, with two faint stones on it.
+  const far = [n, n + 1].map(i => ({ x: MAP_W / 2 + 96 * Math.sin(i * 1.12 + 0.5), y: H - BOTTOM - i * STEP }));
+  const road = segments([...pts, ...far]).join('');
+  const ghosts = far.map(f => `<g transform="translate(${f.x.toFixed(1)} ${f.y.toFixed(1)})"><circle r="21" cy="5" fill="#A199B5" stroke="#1E122C" stroke-width="3"/><circle r="21" fill="#CFC8DC" stroke="#1E122C" stroke-width="3"/></g>`).join('');
   const nodes = pts.map((pt, i) => {
     const p = getPuzzle(JOURNEY[i]), st = i < cur ? 'done' : i === cur ? 'now' : 'locked';
     // Stop markers in the art's style: a rounded stone with an ink outline and a darker lip beneath.
@@ -1431,7 +1504,7 @@ function renderMap(root, state) {
     if (st === 'done') body = `${stone(29, '#FFFDF6', '#D9CDB4')}
       ${thumbMarkup(p, -15, -15, 30, TONES[p.tone])}<text class="node-name" y="54">${esc(p.name)}</text>`;
     else if (st === 'now') body = `<circle class="pulse" r="32" fill="none" stroke="#fff" stroke-width="3"/>
-      ${stone(31, '#F0806B', '#C4553F')}${numberMarkup(i + 1, 34)}<text class="node-name" y="57">${p.w} × ${p.h}</text>`;
+      ${stone(31, '#F0806B', '#C4553F')}${numberMarkup(i + 1, 34)}<text class="node-name" y="57">${p.w ? p.w + ' × ' + p.h : ''}</text>`;
     else body = `${stone(23, '#CFC8DC', '#A199B5')}<g opacity=".9">${numberMarkup(i + 1, 23)}</g>`;
     return `<g class="node ${st}" data-i="${i}" transform="translate(${pt.x.toFixed(1)} ${pt.y.toFixed(1)})" role="button" aria-label="Stop ${i + 1}">${body}<circle r="38" fill="transparent"/></g>`;
   }).join('');
@@ -1439,6 +1512,7 @@ function renderMap(root, state) {
   const zones = ZONES.map((z, k) => {
     const pt = pts[z.at], left = pt.x > MAP_W / 2;
     return `<g transform="translate(${left ? 24 : MAP_W - 24} ${pt.y + 78})" text-anchor="${left ? 'start' : 'end'}">
+      <rect x="${left ? -12 : -(z.name.length * 10.4 + 20)}" y="-17" width="${z.name.length * 10.4 + 32}" height="47" rx="16" fill="#FFFDF6" stroke="#1E122C" stroke-width="3"/>
       <text class="zone-k">ZONE ${k + 1}</text><text class="zone-n" y="19">${z.name}</text></g>`;
   }).join('');
 
@@ -1457,14 +1531,16 @@ function renderMap(root, state) {
   const hero = pts[Math.max(0, Math.min(state.heroAt ?? reach, n - 1))];
   root.innerHTML = `<svg viewBox="0 0 ${MAP_W} ${H}" width="100%" xmlns="http://www.w3.org/2000/svg">
     <defs><filter id="sh" x="-40%" y="-40%" width="180%" height="190%"><feDropShadow dx="0" dy="4" stdDeviation="5" flood-color="#0E2A1F" flood-opacity=".18"/></filter>
+      <linearGradient id="mist" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#EEF3E8"/><stop offset=".45" stop-color="#EEF3E8" stop-opacity=".9"/><stop offset="1" stop-color="#EEF3E8" stop-opacity="0"/></linearGradient>
       <pattern id="sand" patternUnits="userSpaceOnUse" width="130" height="130"><image href="${asset('tex-path')}" width="130" height="130"/></pattern></defs>
     ${decor(pts, H)}
-    <text class="map-end" x="${MAP_W / 2}" y="96" text-anchor="middle">${cur >= n ? 'Every stop reached. More are on the way.' : 'More stops are on the way.'}</text>
-    <path d="${start}${segs.join('')}" fill="none" stroke="#A9803F" stroke-opacity=".5" stroke-width="31" stroke-linecap="round"/>
-    <path d="${start}${segs.join('')}" fill="none" stroke="url(#sand)" stroke-width="26" stroke-linecap="round"/>
-    <path d="${start}${segs.join('')}" fill="none" stroke="#fff" stroke-opacity=".75" stroke-width="2.5" stroke-linecap="round" stroke-dasharray="1 9"/>
+    <path d="${start}${road}" fill="none" stroke="#A9803F" stroke-opacity=".5" stroke-width="31" stroke-linecap="round"/>
+    <path d="${start}${road}" fill="none" stroke="url(#sand)" stroke-width="26" stroke-linecap="round"/>
+    <path d="${start}${road}" fill="none" stroke="#fff" stroke-opacity=".75" stroke-width="2.5" stroke-linecap="round" stroke-dasharray="1 9"/>
     <path id="vine" d="${start}${segs.slice(0, reach).join('')}" fill="none" stroke="none"/>
     <g id="leaves"></g>
+    ${ghosts}
+    <rect x="0" y="0" width="${MAP_W}" height="330" fill="url(#mist)"/>
     ${zones}${nodes}${friends}
     <g id="hero" transform="translate(${hero.x.toFixed(1)} ${hero.y.toFixed(1)})"><g class="bob"><image href="${asset('goose-hello')}" x="-38" y="-100" width="76" height="76" preserveAspectRatio="xMidYMax meet"/></g></g>
   </svg>`;
@@ -1498,7 +1574,7 @@ function animateHero(root, from, to, done) {
 return { MAP_W, layout, renderMap, animateHero };
 })();
 __m['main'] = (() => {
-const { JOURNEY, getPuzzle, setJourney } = __m['puzzles'];
+const { JOURNEY, getPuzzle, setJourney, LEVELS, newPuzzleId } = __m['puzzles'];
 const { Board } = __m['board'];
 const { renderMap, animateHero, layout, MAP_W } = __m['map'];
 const { goose, thumbSvg, ICON, TONES, BODIES, asset } = __m['art'];
@@ -1506,8 +1582,21 @@ const { state, save, reset } = __m['store'];
 const { sfx } = __m['sfx'];
 
 const $ = s => document.querySelector(s);
-setJourney(state.seed);          // this game's puzzle set and order
-const N = JOURNEY.length;
+// The map has a fixed number of stops. Each stop holds whichever puzzle was played there;
+// stops not reached yet hold '?'.
+const STOPS = 30;
+if (!state.path) {                       // a save from before the difficulty menu: keep the stops it already has
+  setJourney(state.seed);
+  const done = JOURNEY.findIndex(id => !state.solved.includes(id));
+  const n = done < 0 ? JOURNEY.length : done;
+  state.path = JOURNEY.slice(0, n);
+  if (n < JOURNEY.length && state.boards[JOURNEY[n]]) state.path.push(JOURNEY[n]);
+  if (!state.path.length) state.path = ['hello'];
+  save();
+}
+function syncJourney() { JOURNEY.length = 0; for (let i = 0; i < STOPS; i++) JOURNEY.push(state.path[i] || '?'); }
+syncJourney();
+const N = STOPS;
 // Public address of the game, used for friend links from the iPhone app. Set once it is hosted.
 const WEB_URL = 'https://muococoa.github.io/nib/';
 // True in the hosted single-page build, where the system share sheet is not available.
@@ -1597,7 +1686,7 @@ function openStop(i) {
   const sheet = openSheet(`
     <div class="stop-head">
       <div class="tile small">${done ? thumbSvg(p, 46, TONES[p.tone]) : goose('wink', 62)}</div>
-      <div><p class="eyebrow">Stop ${i + 1} of ${N}</p><h2>${done ? esc(p.name) : 'A hidden picture'}</h2>
+      <div><p class="eyebrow">Stop ${i + 1}</p><h2>${done ? esc(p.name) : 'A hidden picture'}</h2>
       <div class="chips"><span class="chip">${p.w} × ${p.h}</span><span class="chip">${feel(p)}</span><span class="chip">No guessing</span></div></div>
     </div>
     <div class="stack"><button class="btn-primary" data-a="play">${done ? 'Play again' : started ? 'Continue' : 'Play'}</button></div>`);
@@ -1693,8 +1782,8 @@ function play(i) {
   teardownBoard();
   const p = getPuzzle(JOURNEY[i]), wasSolved = state.solved.includes(p.id);
   playing = i;
-  $('#play-name').textContent = `Stop ${i + 1}`;
-  $('#play-meta').textContent = `${p.w} × ${p.h} · ${feel(p)}`;
+  $('#play-name').textContent = p.level || feel(p);
+  $('#play-meta').textContent = `Stop ${i + 1} · ${p.w} × ${p.h}`;
   coach = p.id === 'hello' && !wasSolved ? { step: 0 } : null;
   $('#coach').hidden = !coach;
   show('play');
@@ -1736,7 +1825,7 @@ function showResult(i, p, first) {
   const sheet = openSheet(`
     <div class="center">
       <div class="tile">${thumbSvg(p, 96, TONES[p.tone])}${goose(first ? 'party' : 'love', 92, 'cheer')}</div>
-      <p class="eyebrow">Stop ${i + 1} of ${N} ${first ? 'reached' : 'solved again'}</p>
+      <p class="eyebrow">Stop ${i + 1} ${first ? 'reached' : 'solved again'}</p>
       <h2>${esc(p.name)}</h2>
       <p class="sub">${first && !last ? 'Pichi waddles on. The next stop is open.' : last && first ? 'You reached the end of the path. More stops are on the way.' : 'Still a lovely one.'}</p>
     </div>
@@ -1789,37 +1878,27 @@ function importFriend() {
   } catch (_) {}
 }
 
+// Friends: everyone you have added and the stop each has reached.
 function friendsSheet() {
   sfx.tap();
   const list = state.friends.length
-    ? state.friends.map(f => `<div class="friend-row"><span class="avatar" style="--c:${BODIES[f.color % BODIES.length].base};--l:${BODIES[f.color % BODIES.length].lite}">${goose('kiss', 28)}</span><span class="who">${esc(f.name)}</span><span class="where">Stop ${Math.min(f.stop + 1, N)}</span><button data-rm="${esc(f.id)}">Remove</button></div>`).join('')
-    : '';
+    ? state.friends.map(f => `<div class="friend-row"><span class="avatar" style="--c:${BODIES[f.color % BODIES.length].base};--l:${BODIES[f.color % BODIES.length].lite}">${goose('kiss', 28)}</span><span class="who">${esc(f.name)}</span><span class="where">Stop ${Math.min(f.stop + 1, N)}</span><button data-rm="${esc(f.id)}" aria-label="Remove ${esc(f.name)}">Remove</button></div>`).join('')
+    : `<div class="center" style="padding:10px 0 4px">${goose('hello', 96)}</div><p class="note center">No friends here yet. Invite someone, or open a link a friend sends you, and they will appear here and on your map.</p>`;
   const sheet = openSheet(`
-    <h2>Friends on the map</h2>
-    <p class="sub">Send your link. Whoever opens it sees your goose at the stop you have reached.</p>
-    <div class="stack">
-      <input class="field" id="me-name" maxlength="14" placeholder="Your name" value="${esc(state.me.name)}" autocomplete="off">
-    </div>
-    <div class="swatches">${BODIES.map((_, i) => `<button class="swatch ${i === state.me.color ? 'on' : ''}" data-c="${i}" aria-label="Colour ${i + 1}" style="--c:${BODIES[i].base};--l:${BODIES[i].lite}"><i></i></button>`).join('')}</div>
-    <div class="stack"><button class="btn-primary" data-a="share">Share my progress</button></div>
-    ${list ? `<div style="margin-top:18px">${list}</div>` : '<p class="note">No friends here yet. When a friend sends you their link, open it on this phone and they appear on your map.</p>'}
-    <p class="note">Links carry a snapshot. Ask for a fresh link to see where a friend is now.</p>`);
-  const name = sheet.querySelector('#me-name');
-  name.oninput = () => { state.me.name = name.value.trim(); save(); };
-  for (const b of sheet.querySelectorAll('.swatch')) b.onclick = () => {
-    state.me.color = +b.dataset.c; save();
-    for (const o of sheet.querySelectorAll('.swatch')) o.classList.toggle('on', o === b);
-  };
+    <h2>Friends</h2>
+    <p class="sub">${state.friends.length ? 'Where everyone is on the path.' : 'See how far your friends have travelled.'}</p>
+    <div style="margin-top:14px">${list}</div>
+    <div class="stack"><button class="btn-primary" data-a="share">Invite a friend</button></div>
+    <p class="note">Your invite shows the stop you are on right now. To see a friend's latest stop, ask them for a fresh link.</p>`);
   for (const b of sheet.querySelectorAll('[data-rm]')) b.onclick = () => {
     state.friends = state.friends.filter(f => f.id !== b.dataset.rm); save(); drawMap(); friendsSheet();
   };
   sheet.querySelector('[data-a=share]').onclick = async () => {
-    if (!state.me.name) { name.focus(); toast('Add your name first.'); return; }
+    if (!state.me.name) { profileSheet(true); return; }
     const base = WEB_URL || (location.protocol.startsWith('http') ? location.origin + location.pathname : '');
-    if (!base) { toast('Friend links switch on once the game has a web address.'); return; }
+    if (!base) { toast('Invites switch on once the game has a web address.'); return; }
     const url = base + '#f-' + encode({ i: state.me.id, n: state.me.name, s: curStop(), c: state.me.color });
     const text = `I'm at stop ${Math.min(curStop() + 1, N)} in Pichigram. Open this to put me on your map:`;
-    // If nothing else works, show the link so it can be copied by hand.
     const showLink = () => {
       let box = sheet.querySelector('#share-link');
       if (!box) {
@@ -1831,11 +1910,33 @@ function friendsSheet() {
       toast('Copy the link below and send it.');
     };
     const copy = async () => {
-      try { await navigator.clipboard.writeText(url); toast('Link copied. Paste it to a friend.'); } catch (_) { showLink(); }
+      try { await navigator.clipboard.writeText(url); toast('Invite link copied. Paste it to a friend.'); } catch (_) { showLink(); }
     };
     if (EMBEDDED || !navigator.share) { copy(); return; }
     try { await navigator.share({ title: 'Pichigram', text, url }); }
     catch (e) { if (!e || e.name !== 'AbortError') copy(); }
+  };
+}
+
+// My profile: the name and colour friends see.
+function profileSheet(forInvite) {
+  const sheet = openSheet(`
+    <h2>My profile</h2>
+    <p class="sub">${forInvite ? 'Add your name so friends know who the invite is from.' : 'How you appear on your friends\u2019 maps.'}</p>
+    <div class="stack">
+      <input class="field" id="me-name" maxlength="14" placeholder="Your name" value="${esc(state.me.name)}" autocomplete="off">
+    </div>
+    <div class="swatches">${BODIES.map((_, i) => `<button class="swatch ${i === state.me.color ? 'on' : ''}" data-c="${i}" aria-label="Colour ${i + 1}" style="--c:${BODIES[i].base};--l:${BODIES[i].lite}"><i></i></button>`).join('')}</div>
+    <div class="stack"><button class="btn-primary" data-a="done">${forInvite ? 'Continue' : 'Done'}</button></div>`);
+  const name = sheet.querySelector('#me-name');
+  name.oninput = () => { state.me.name = name.value.trim(); save(); };
+  for (const b of sheet.querySelectorAll('.swatch')) b.onclick = () => {
+    state.me.color = +b.dataset.c; save();
+    for (const o of sheet.querySelectorAll('.swatch')) o.classList.toggle('on', o === b);
+  };
+  sheet.querySelector('[data-a=done]').onclick = () => {
+    if (forInvite && !state.me.name) { name.focus(); toast('Add your name first.'); return; }
+    if (forInvite) friendsSheet(); else closeSheet();
   };
 }
 
@@ -1845,9 +1946,11 @@ function settingsSheet() {
     <h2>Settings</h2>
     <div style="margin-top:12px">
       <div class="row"><div><div class="lbl">Sound and vibration</div><div class="hint">Soft ticks as you fill and mark</div></div><button class="switch ${state.sound ? 'on' : ''}" data-a="sound" role="switch" aria-checked="${state.sound}" aria-label="Sound and vibration"></button></div>
-      <div class="row"><div><div class="lbl">Progress</div><div class="hint">${state.solved.filter(id => JOURNEY.includes(id)).length} of ${N} stops reached. Saved on this device.</div></div></div>
+      <div class="row"><div><div class="lbl">Progress</div><div class="hint">${curStop()} stops reached. Saved on this device.</div></div></div>
     </div>
     <div class="stack">
+      <button class="btn-secondary" data-a="friends">Friends</button>
+      <button class="btn-secondary" data-a="profile">My profile</button>
       <button class="btn-secondary" data-a="tutorial">Replay the tutorial</button>
       <button class="btn-text danger" data-a="reset">Reset all progress</button>
     </div>`);
@@ -1856,22 +1959,23 @@ function settingsSheet() {
     e.currentTarget.classList.toggle('on', state.sound); e.currentTarget.setAttribute('aria-checked', state.sound);
     sfx.tap();
   };
+  sheet.querySelector('[data-a=friends]').onclick = friendsSheet;
+  sheet.querySelector('[data-a=profile]').onclick = () => { sfx.tap(); profileSheet(false); };
   sheet.querySelector('[data-a=tutorial]').onclick = () => {
     closeSheet(); play(0);
     coach = { step: 0 }; board.restart(); updateCoach();
   };
   sheet.querySelector('[data-a=reset]').onclick = e => {
     const b = e.currentTarget;
-    if (b.dataset.sure) { reset(); setJourney(state.seed); closeSheet(); showMap(); toast('Fresh start, with a new set of puzzles.'); }
+    if (b.dataset.sure) { reset(); syncJourney(); closeSheet(); showMap(); toast('Fresh start.'); }
     else { b.dataset.sure = 1; b.textContent = 'Tap again to erase every solved stop'; }
   };
 }
 
 // ---------- wiring ----------
-$('#brand-mark').innerHTML = goose('hello', 40);
+
 // The map's ground is the same painted grass the props are drawn with.
 $('#map-canvas').style.backgroundImage = `url("${asset('tex-grass')}")`;
-$('#btn-friends').innerHTML = ICON.friends;
 $('#btn-settings').innerHTML = ICON.settings;
 $('#btn-back').innerHTML = ICON.back;
 $('#btn-hint').innerHTML = ICON.hint;
@@ -1884,10 +1988,41 @@ $('#map-canvas').addEventListener('click', e => {
   const n = e.target.closest('.node');
   if (n) openStop(+n.dataset.i);
 });
-$('#btn-continue').onclick = () => { const c = curStop(); if (c >= N) openStop(N - 1); else { sfx.tap(); play(c); } };
-$('#btn-friends').onclick = friendsSheet;
+$('#btn-continue').onclick = () => {
+  const c = curStop();
+  sfx.tap();
+  if (c >= N) openStop(N - 1);
+  else if (JOURNEY[c] !== '?') play(c);          // the tutorial, or a puzzle already started
+  else chooseLevel(c);
+};
+
+// The difficulty menu. Every choice makes a new puzzle that has never been seen before.
+function chooseLevel(stop) {
+  const sheet = openSheet(`
+    <h2 class="center">New puzzle</h2>
+    <div class="stack levels">
+      ${Object.entries(LEVELS).map(([key, L]) => `<button class="btn-secondary level" data-level="${key}"><span>${L.name}</span><small>${L.size} × ${L.size}</small></button>`).join('')}
+    </div>
+    <button class="btn-text" data-a="cancel">Cancel</button>`);
+  sheet.querySelector('[data-a=cancel]').onclick = closeSheet;
+  for (const b of sheet.querySelectorAll('.level')) b.onclick = () => {
+    b.querySelector('span').textContent = 'Making it…';
+    setTimeout(() => {                      // let the label paint before the puzzle is built
+      state.path[stop] = newPuzzleId(b.dataset.level);
+      getPuzzle(state.path[stop]);
+      save(); syncJourney(); closeSheet(); play(stop);
+    }, 30);
+  };
+}
 $('#btn-settings').onclick = settingsSheet;
-$('#btn-back').onclick = () => { sfx.tap(); showMap(); };
+$('#btn-back').onclick = () => {
+  sfx.tap();
+  const id = playing >= 0 ? JOURNEY[playing] : null;
+  if (id && id.startsWith('g:') && !state.solved.includes(id) && board && !board.cells.some(v => v)) {
+    state.path.length = playing; delete state.boards[id]; save(); syncJourney();      // untouched: pick again next time
+  }
+  showMap();
+};
 $('#btn-hint').onclick = hint;
 $('#btn-more').onclick = moreMenu;
 $('#btn-fit').onclick = () => { if (board) { sfx.tap(); board.zoomTo(board.zoomed ? 1 : Math.min(board.maxS, 2.1)); } };
