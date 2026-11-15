@@ -1,6 +1,6 @@
 {
-  "name": "Nib",
-  "short_name": "Nib",
+  "name": "Pichigram",
+  "short_name": "Pichigram",
   "description": "A calm nonogram journey. No guessing, no timers.",
   "start_url": "./",
   "scope": "./",
