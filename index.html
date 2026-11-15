@@ -189,6 +189,18 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--green); out
 #brand-mark .goose { margin: -4px -2px -4px -4px; }
 #coach .coach-who { margin: -6px 0 -6px -6px; }
 @media (prefers-reduced-motion: reduce) { .tile .cheer { animation: none; } }
+
+/* ---------- puzzle rules: hearts, mistakes ---------- */
+#play { background: #FBF5EA; }                 /* warm cream, apart from the green map */
+#hearts { display: flex; gap: 2px; margin-right: 4px; }
+.heart { display: grid; color: #F0806B; }
+.heart.lost { color: #DDD8E2; }
+.heart.pop { animation: heart-pop .45s var(--ease); }
+@keyframes heart-pop { 0% { transform: scale(1.7); } 100% { transform: scale(1); } }
+#board-wrap.shake { animation: shake .3s linear; }
+@keyframes shake { 0%, 100% { transform: translateX(0); } 20% { transform: translateX(-7px); } 40% { transform: translateX(6px); } 60% { transform: translateX(-4px); } 80% { transform: translateX(3px); } }
+.tile .goose { margin: auto; }
+@media (prefers-reduced-motion: reduce) { #board-wrap.shake, .heart.pop { animation: none; } }
 </style>
 </head>
 <body>
@@ -211,6 +223,7 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--green); out
     <header class="bar play-top">
       <button id="btn-back" class="icon-btn" aria-label="Back to map"></button>
       <div class="play-title"><strong id="play-name"></strong><span id="play-meta"></span></div>
+      <div id="hearts" aria-label="Hearts left"></div>
       <div class="bar-actions">
         <button id="btn-fit" class="icon-btn" aria-label="Zoom in or fit" hidden></button>
         <button id="btn-hint" class="icon-btn" aria-label="Hint"></button>
@@ -222,12 +235,10 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--green); out
     </div>
     <div id="coach" hidden></div>
     <footer class="play-bottom">
-      <button id="btn-undo" class="tool-btn" aria-label="Undo"></button>
       <div class="seg" data-tool="1" role="group" aria-label="Tool">
         <button data-tool="2" aria-label="Mark as empty" aria-pressed="false"></button>
         <button data-tool="1" class="on" aria-label="Fill" aria-pressed="true"></button>
       </div>
-      <button id="btn-redo" class="tool-btn" aria-label="Redo"></button>
     </footer>
   </section>
 </div>
@@ -672,16 +683,18 @@ const buzz = (ms, kind = 'light') => {
   if (navigator.vibrate) { try { navigator.vibrate(ms); } catch (_) {} }
 };
 
+// Low, quiet, rounded notes from one warm chord, so nothing pierces.
 const sfx = {
-  fill() { blip(620, 0.07, 0.05, 'triangle'); buzz(6); },
-  mark() { blip(380, 0.06, 0.04, 'sine'); buzz(4, 'soft'); },
-  clear() { blip(260, 0.06, 0.035, 'sine'); },
-  tap() { blip(520, 0.05, 0.03, 'sine'); },
-  undo() { blip(330, 0.08, 0.035, 'sine'); },
-  hint() { blip(700, 0.12, 0.04, 'sine'); blip(930, 0.16, 0.035, 'sine', 0.09); },
-  line() { blip(784, 0.12, 0.035, 'sine'); },
-  win() { [523, 659, 784, 1047].forEach((f, i) => blip(f, 0.5, 0.05, 'triangle', i * 0.11)); buzz([12, 40, 18], 'success'); },
-  hop() { blip(440, 0.1, 0.04, 'sine'); blip(660, 0.14, 0.04, 'sine', 0.1); },
+  fill() { blip(262, 0.22, 0.05, 'sine'); buzz(6); },
+  mark() { blip(196, 0.2, 0.04, 'sine'); buzz(4, 'soft'); },
+  clear() { blip(175, 0.18, 0.03, 'sine'); },
+  tap() { blip(220, 0.16, 0.028, 'sine'); },
+  undo() { blip(196, 0.16, 0.028, 'sine'); },
+  hint() { blip(330, 0.3, 0.035, 'sine'); blip(392, 0.36, 0.03, 'sine', 0.12); },
+  line() { blip(330, 0.3, 0.035, 'sine'); blip(392, 0.36, 0.032, 'sine', 0.09); },
+  miss() { blip(131, 0.3, 0.06, 'sine'); blip(117, 0.36, 0.05, 'sine', 0.12); buzz(30); },
+  win() { [262, 330, 392, 523].forEach((f, i) => blip(f, 0.9, 0.045, 'sine', i * 0.2)); buzz([12, 40, 18], 'success'); },
+  hop() { blip(294, 0.25, 0.035, 'sine'); blip(392, 0.3, 0.035, 'sine', 0.14); },
 };
 
 return { sfx };
@@ -693,7 +706,8 @@ const INK = '#0E2A1F';
 const GREEN = '#2FA36B';
 
 // Finished pictures print in one of four greens.
-const TONES = { peri: '#2FA36B', coral: '#16794F', sage: '#4DB382', gold: '#1F9274' };
+// Finished pictures are printed in warm colours from Pichi's palette.
+const TONES = { peri: '#F0806B', coral: '#E99A2C', sage: '#4FA8E0', gold: '#8B72E6' };
 
 // Colours that tell friends apart on the map (ring around their goose).
 const BODIES = [
@@ -748,6 +762,7 @@ const ICON = {
   settings: I('<path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/>'),
   fit: I('<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>'),
   fill: '<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="2" width="12" height="12" rx="2.5" fill="currentColor"/></svg>',
+  heart: '<svg width="26" height="26" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20.5s-7.5-4.6-7.5-10.2A4.3 4.3 0 0 1 12 7.6a4.3 4.3 0 0 1 7.5 2.7c0 5.6-7.5 10.2-7.5 10.2z" fill="currentColor" stroke="#1E122C" stroke-width="1.8" stroke-linejoin="round"/></svg>',
   mark: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M3.5 3.5l9 9M12.5 3.5l-9 9"/></svg>',
   lock: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2.5"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>',
 };
@@ -763,9 +778,9 @@ const { cluesFor, runsOf, nextMove } = __m['solver'];
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const FONT = '"Outfit", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
 const K = {
-  board: '#FFFFFF', line: '#D6E3D9', line5: '#86A393', border: '#0E2A1F', ink: '#0E2A1F',
-  clue: '#0E2A1F', clueDone: '#A7BCAE', mark: '#7F998B',
-  band: 'rgba(47,163,107,.09)', bandStrong: 'rgba(47,163,107,.20)', accent: '#2FA36B', wrong: '#E4534A',
+  board: '#FFFFFF', line: '#E8E1D4', line5: '#8E86A0', border: '#1E122C', ink: '#1E122C',
+  clue: '#1E122C', clueDone: '#BDB6C6', mark: '#A9A2B6', bad: '#F0806B',
+  band: 'rgba(242,180,65,.14)', bandStrong: 'rgba(240,128,107,.20)', accent: '#F0806B', wrong: '#F0806B',
 };
 
 function rr(ctx, x, y, w, h, r) {
@@ -785,7 +800,7 @@ function mix(a, b, t) {
 }
 
 class Board {
-  constructor(canvas, puzzle, { cells, tone = '#2FA36B', onChange, onSolved, onTick, onView } = {}) {
+  constructor(canvas, puzzle, { cells, bad, hearts, tone = '#F0806B', onChange, onSolved, onTick, onView, onMistake, onLine } = {}) {
     this.cv = canvas;
     this.ctx = canvas.getContext('2d');
     this.p = puzzle; this.w = puzzle.w; this.h = puzzle.h;
@@ -795,8 +810,12 @@ class Board {
     if (cells && cells.length === this.cells.length) for (let i = 0; i < cells.length; i++) this.cells[i] = +cells[i] || 0;
     this.onChange = onChange || (() => {}); this.onSolved = onSolved || (() => {});
     this.onTick = onTick || (() => {}); this.onView = onView || (() => {});
+    this.onMistake = onMistake || (() => {}); this.onLine = onLine || (() => {});
+    // Rules: three hearts; a wrong move is corrected, flagged and costs a heart; placed cells are locked.
+    this.bad = new Set(bad || []);
+    this.hearts = hearts == null ? 3 : hearts;
+    this.pops = new Map();          // cell -> time its snap animation starts
     this.tool = 1;
-    this.undoStack = []; this.redoStack = [];
     this.s = 1; this.ox = 0; this.oy = 0;
     this.hl = []; this.wrong = new Set();
     this.ptrs = new Map(); this.stroke = null; this.pinch = null; this.block = false; this.active = null;
@@ -871,17 +890,19 @@ class Board {
   get zoomed() { return this.s > 1.02; }
   get canZoom() { return this.maxS > 1; }
 
+  // A line is done when every cell that should be filled is filled.
   refreshDone() {
     const { w, h } = this;
-    const same = (a, b) => a.length === b.length && a.every((v, i) => v === b[i]);
     this.rowDone = []; this.colDone = [];
     for (let y = 0; y < h; y++) {
-      const line = []; for (let x = 0; x < w; x++) line.push(this.cells[y * w + x] === 1 ? 1 : 0);
-      this.rowDone.push(same(runsOf(line), this.clues.rows[y]));
+      let ok = true;
+      for (let x = 0; x < w; x++) if (this.p.grid[y][x] && this.cells[y * w + x] !== 1) ok = false;
+      this.rowDone.push(ok);
     }
     for (let x = 0; x < w; x++) {
-      const line = []; for (let y = 0; y < h; y++) line.push(this.cells[y * w + x] === 1 ? 1 : 0);
-      this.colDone.push(same(runsOf(line), this.clues.cols[x]));
+      let ok = true;
+      for (let y = 0; y < h; y++) if (this.p.grid[y][x] && this.cells[y * w + x] !== 1) ok = false;
+      this.colDone.push(ok);
     }
   }
 
@@ -907,38 +928,28 @@ class Board {
     this.req();
   }
 
-  undo() {
-    const op = this.undoStack.pop(); if (!op || this.locked) return false;
-    for (const i of op.cells) this.cells[i] = op.from;
-    this.redoStack.push(op); this.changed(); return true;
-  }
-  redo() {
-    const op = this.redoStack.pop(); if (!op || this.locked) return false;
-    for (const i of op.cells) this.cells[i] = op.to;
-    this.undoStack.push(op); this.changed(); return true;
-  }
   restart() {
-    this.cells.fill(0); this.undoStack = []; this.redoStack = []; this.hl = [];
+    this.cells.fill(0); this.bad.clear(); this.pops.clear(); this.hearts = 3; this.hl = [];
     this.changed();
   }
 
-  // Points at mistakes first; otherwise at a line where something is certain.
+  // A hint places one cell that logic decides, for free.
   hint() {
+    if (this.locked || this.hearts <= 0) return null;
     const { w, h } = this;
-    const bad = [];
-    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
-      const v = this.cells[y * w + x], sol = this.p.grid[y][x];
-      if ((v === 1 && !sol) || (v === 2 && sol)) bad.push(y * w + x);
-    }
-    if (bad.length) { this.wrong = new Set(bad); this.hl = []; this.req(); return { type: 'wrong', n: bad.length }; }
     const known = [];
     for (let y = 0; y < h; y++) { const r = []; for (let x = 0; x < w; x++) r.push(this.cells[y * w + x]); known.push(r); }
     const mv = nextMove(this.clues, w, h, known);
-    if (!mv) return null;
-    this.hl = [{ type: mv.type, index: mv.index }];
-    this.reveal(mv);
-    this.req();
-    return mv;
+    let cell = mv ? mv.cells[0] : null;
+    if (!cell) for (let i = 0; i < this.cells.length && !cell; i++) if (this.cells[i] === 0) cell = { x: i % w, y: (i / w) | 0 };
+    if (!cell) return null;
+    const i = cell.y * w + cell.x;
+    this.cells[i] = this.p.grid[cell.y][cell.x] ? 1 : 2;
+    this.pops.set(i, performance.now());
+    this.hl = mv ? [{ type: mv.type, index: mv.index }] : [];
+    if (mv) this.reveal(mv);
+    this.afterMove();
+    return mv || { type: 'row', index: cell.y };
   }
 
   // Scroll a hinted line into view when zoomed.
@@ -1010,43 +1021,63 @@ class Board {
   }
 
   begin(cell, id) {
-    const orig = this.cells[cell.y * this.w + cell.x];
-    const target = orig === this.tool ? 0 : orig === 0 ? this.tool : 0;
-    this.stroke = { id, sx: cell.x, sy: cell.y, orig, target, axis: null, changes: new Set(), n: 0 };
+    if (this.hearts <= 0 || this.cells[cell.y * this.w + cell.x] !== 0) return;   // placed cells are locked
+    this.stroke = { id, sx: cell.x, sy: cell.y, orig: 0, target: this.tool, axis: null, changes: new Set(), order: [], n: 0 };
     this.extend(cell);
   }
 
+  // While the finger is down the stroke is only a preview; it is judged when the finger lifts.
   extend(cell) {
     const st = this.stroke; if (!st || !cell) return;
-    for (const i of st.changes) this.cells[i] = st.orig;
-    st.changes.clear();
+    for (const i of st.changes) this.cells[i] = 0;
+    st.changes.clear(); st.order = [];
     const dx = cell.x - st.sx, dy = cell.y - st.sy;
     if (!st.axis && (dx || dy)) st.axis = Math.abs(dx) >= Math.abs(dy) ? 'row' : 'col';
     let ex = st.sx, ey = st.sy;
     if (st.axis === 'row') ex = cell.x; else if (st.axis === 'col') ey = cell.y;
-    const x1 = Math.min(st.sx, ex), x2 = Math.max(st.sx, ex), y1 = Math.min(st.sy, ey), y2 = Math.max(st.sy, ey);
-    for (let y = y1; y <= y2; y++) for (let x = x1; x <= x2; x++) {
-      const i = y * this.w + x;
-      if (this.cells[i] === st.orig) { this.cells[i] = st.target; st.changes.add(i); }
+    const steps = Math.max(Math.abs(ex - st.sx), Math.abs(ey - st.sy));
+    for (let k = 0; k <= steps; k++) {
+      const x = st.sx + Math.sign(ex - st.sx) * k, y = st.sy + Math.sign(ey - st.sy) * k, i = y * this.w + x;
+      if (this.cells[i] === 0) { this.cells[i] = st.target; st.changes.add(i); st.order.push(i); }
     }
-    st.len = (x2 - x1) + (y2 - y1) + 1;
+    st.len = steps + 1;
     this.active = { x: ex, y: ey };
     if (st.changes.size !== st.n) { st.n = st.changes.size; this.onTick(st.target); }
     this.req();
   }
 
+  // Judge the stroke cell by cell from where it started. It stops at the first mistake.
   commit() {
     const st = this.stroke; this.stroke = null; this.active = null;
-    if (!st || !st.changes.size) { this.req(); return; }
-    this.undoStack.push({ cells: [...st.changes], from: st.orig, to: st.target });
-    if (this.undoStack.length > 400) this.undoStack.shift();
-    this.redoStack = [];
+    if (!st || !st.order.length) { this.req(); return; }
+    const now = performance.now();
+    let mistake = false;
+    for (const i of st.order) {
+      if (mistake) { this.cells[i] = 0; continue; }
+      const correct = this.p.grid[(i / this.w) | 0][i % this.w] ? 1 : 2;
+      this.cells[i] = correct;
+      this.pops.set(i, now);
+      if (correct !== st.target) { this.bad.add(i); this.hearts--; mistake = true; }
+    }
+    if (mistake) this.onMistake(this.hearts);
+    this.afterMove();
+  }
+
+  // Finished lines cross out their remaining cells, one after another.
+  afterMove() {
+    const { w, h } = this, now = performance.now();
+    this.refreshDone();
+    let k = 0;
+    const cross = i => { if (this.cells[i] === 0) { this.cells[i] = 2; this.pops.set(i, now + 70 + k++ * 34); } };
+    for (let y = 0; y < h; y++) if (this.rowDone[y]) for (let x = 0; x < w; x++) cross(y * w + x);
+    for (let x = 0; x < w; x++) if (this.colDone[x]) for (let y = 0; y < h; y++) cross(y * w + x);
+    if (k) this.onLine();
     this.changed();
   }
 
   cancelStroke() {
     const st = this.stroke; if (!st) return;
-    for (const i of st.changes) this.cells[i] = st.orig;
+    for (const i of st.changes) this.cells[i] = 0;
     this.stroke = null; this.active = null; this.req();
   }
 
@@ -1190,23 +1221,35 @@ class Board {
       ctx.fillRect(vx, Math.round(vy + y * c - this.oy) - t / 2, vw, t);
     }
     ctx.globalAlpha = 1;
-    const gap = Math.max(1, c * 0.045), rad = c * 0.13, span = Math.max(1, w + h - 2);
+    const gap = Math.max(1, c * 0.045), rad = c * 0.13, span = Math.max(1, w + h - 2), nowMs = performance.now();
+    let animating = false;
     for (let y = ya; y <= yb; y++) for (let x = xa; x <= xb; x++) {
       const v = this.cells[y * w + x];
       if (!v) continue;
       const px = vx + x * c - this.ox, py = vy + y * c - this.oy;
+      const idx = y * w + x, born = this.pops.get(idx), isBad = this.bad.has(idx);
+      let k = 1;
+      if (born != null) {
+        const t = (nowMs - born) / 230;
+        if (t < 0) { animating = true; continue; }                 // waiting its turn
+        if (t >= 1) this.pops.delete(idx);
+        else { const u = t - 1, o = 2.4; k = 0.35 + 0.65 * (1 + (o + 1) * u * u * u + o * u * u); animating = true; }   // ease-out-back
+      }
+      if (k !== 1) { ctx.save(); ctx.translate(px + c / 2, py + c / 2); ctx.scale(k, k); ctx.translate(-(px + c / 2), -(py + c / 2)); }
       if (v === 1) {
         const la = this.win ? clamp((wa - ((x + y) / span) * 0.42) / 0.26, 0, 1) : 0;
         const e = la * la * (3 - 2 * la), g2 = gap * (1 - e);
-        ctx.fillStyle = la ? mix(K.ink, this.tone, e) : K.ink;
+        const base = isBad ? K.bad : K.ink;
+        ctx.fillStyle = la ? mix(base, this.tone, e) : base;
         rr(ctx, px + g2 - e * 0.3, py + g2 - e * 0.3, c - 2 * g2 + e * 0.6, c - 2 * g2 + e * 0.6, rad * (1 - e)); ctx.fill();
       } else if (fade > 0) {
         const m = c * 0.33;
-        ctx.globalAlpha = fade; ctx.strokeStyle = K.mark; ctx.lineWidth = Math.max(1.4, c * 0.075); ctx.lineCap = 'round';
+        ctx.globalAlpha = fade; ctx.strokeStyle = isBad ? K.bad : K.mark; ctx.lineWidth = Math.max(1.6, c * 0.085); ctx.lineCap = 'round';
         ctx.beginPath(); ctx.moveTo(px + m, py + m); ctx.lineTo(px + c - m, py + c - m);
         ctx.moveTo(px + c - m, py + m); ctx.lineTo(px + m, py + c - m); ctx.stroke();
         ctx.globalAlpha = 1;
       }
+      if (k !== 1) ctx.restore();
       if (this.wrong.has(y * w + x)) {
         ctx.strokeStyle = K.wrong; ctx.lineWidth = 2;
         rr(ctx, px + 1.5, py + 1.5, c - 3, c - 3, rad); ctx.stroke();
@@ -1232,7 +1275,7 @@ class Board {
       ctx.fillText(label, cx, cy + 0.5);
     }
 
-    if (this.win && wa < 1) this.req();
+    if ((this.win && wa < 1) || animating) this.req();
   }
 }
 
@@ -1500,13 +1543,13 @@ const TUTORIAL = [
   { hl: [['row', 3]], need: [[0, 3, 1], [1, 3, 1], [2, 3, 1], [3, 3, 1], [4, 3, 1]],
     text: 'Same again. This row is also a <b>5</b>.' },
   { hl: [['row', 2]], need: [[0, 2, 1], [2, 2, 1], [4, 2, 1]],
-    text: '<b>1 1 1</b> means three single cells with a gap between each. Only one arrangement fits: fill the first, middle and last cell.' },
+    text: '<b>1 1 1</b> means three single cells with a gap between each. Only one arrangement fits: fill the first, middle and last cell. The gaps cross themselves out.' },
   { hl: [['row', 2]], need: [[1, 2, 2], [3, 2, 2]], tool: 2,
     text: 'Now tap the switch below to change to <b>✕</b> and mark the two gaps. A ✕ is a note that the cell stays empty.' },
   { hl: [['col', 0], ['col', 4]], need: [[0, 0, 2], [0, 4, 2], [4, 0, 2], [4, 4, 2]], tool: 2,
     text: 'The outer columns say <b>3</b> and already have three filled. They are done, so mark their top and bottom cells.' },
   { hl: [['col', 1], ['col', 3]], need: [[1, 0, 1], [1, 4, 1], [3, 0, 1], [3, 4, 1]], tool: 1,
-    text: 'These columns say <b>2 2</b>: two pairs with a gap. The gap is already marked. Tap the switch back to <b>■</b> and fill the top and bottom of each.' },
+    text: 'These columns say <b>2 2</b>: two pairs with a gap. Finished lines get crossed out for you. Fill the top and bottom of each column. Careful: a wrong tap costs a heart.' },
   { hl: [['row', 0]], need: [[2, 0, 1]], tool: 1,
     text: 'Last one. The top row needs <b>3</b> in a row, so fill its middle cell.' },
 ];
@@ -1535,9 +1578,36 @@ function updateCoach() {
   if (st.tool && board.tool !== st.tool) document.querySelector(`.seg button[data-tool="${st.tool}"]`).classList.add('nudge');
 }
 
+function renderHearts() {
+  const n = board ? board.hearts : 3;
+  $('#hearts').innerHTML = [0, 1, 2].map(i => `<span class="heart ${i < n ? '' : 'lost'}">${ICON.heart}</span>`).join('');
+}
+
+// A wrong move: it has already been corrected on the board and cost a heart.
+function onMistake(left) {
+  sfx.miss();
+  renderHearts();
+  const lost = document.querySelectorAll('#hearts .heart')[left];
+  if (lost) lost.classList.add('pop');
+  const wrap = $('#board-wrap');
+  wrap.classList.remove('shake'); void wrap.offsetWidth; wrap.classList.add('shake');
+  if (left <= 0) setTimeout(outOfHearts, 500);
+}
+
+function outOfHearts() {
+  if (!board) return;
+  const sheet = openSheet(`
+    <div class="center">
+      <div class="tile">${goose('cry', 120)}</div>
+      <h2>Out of hearts</h2>
+      <p class="sub">Three mistakes on this one. Try it again?</p>
+    </div>
+    <div class="stack"><button class="btn-primary" data-a="again">Try again</button></div>`, { dismiss: false });
+  sheet.querySelector('[data-a=again]').onclick = () => { board.restart(); if (coach) coach.step = 0; updateCoach(); closeSheet(); };
+}
+
 function updateControls() {
-  $('#btn-undo').disabled = !board || !board.undoStack.length || board.locked;
-  $('#btn-redo').disabled = !board || !board.redoStack.length || board.locked;
+  renderHearts();
   const fit = $('#btn-fit');
   fit.hidden = !board || !board.canZoom || board.locked;
   fit.classList.toggle('zoomed', !!board && board.zoomed);
@@ -1558,15 +1628,17 @@ function play(i) {
   coach = p.id === 'hello' && !wasSolved ? { step: 0 } : null;
   $('#coach').hidden = !coach;
   show('play');
+  // Saved boards hold the cells, the mistakes and the hearts left. Older saves (plain text) start fresh.
+  const saved = state.boards[p.id] && typeof state.boards[p.id] === 'object' ? state.boards[p.id] : null;
   let lastDone = 0;
   board = new Board($('#board'), p, {
-    cells: state.boards[p.id], tone: TONES[p.tone],
+    cells: saved && saved.c, bad: saved && saved.b, hearts: saved ? saved.h : 3, tone: TONES[p.tone],
+    onMistake, onLine: () => sfx.line(),
     onTick: v => (v === 1 ? sfx.fill() : v === 2 ? sfx.mark() : sfx.clear()),
     onView: updateControls,
     onChange: () => {
-      state.boards[p.id] = board.serialize(); save();
+      state.boards[p.id] = { c: board.serialize(), b: [...board.bad], h: board.hearts }; save();
       const done = board.rowDone.filter(Boolean).length + board.colDone.filter(Boolean).length;
-      if (done > lastDone && !board.isSolved()) sfx.line();
       lastDone = done;
       updateControls(); updateCoach();
     },
@@ -1624,8 +1696,7 @@ function hint() {
   const r = board.hint();
   sfx.hint();
   if (!r) toast('Nothing new to place from here.');
-  else if (r.type === 'wrong') toast(r.n === 1 ? 'One cell does not belong. It is outlined.' : `${r.n} cells do not belong. They are outlined.`);
-  else toast(`${r.type === 'row' ? 'Row' : 'Column'} ${r.index + 1} has a sure move.`);
+
 }
 
 // ---------- friends ----------
@@ -1733,8 +1804,6 @@ $('#btn-settings').innerHTML = ICON.settings;
 $('#btn-back').innerHTML = ICON.back;
 $('#btn-hint').innerHTML = ICON.hint;
 $('#btn-more').innerHTML = ICON.more;
-$('#btn-undo').innerHTML = ICON.undo;
-$('#btn-redo').innerHTML = ICON.redo;
 $('#btn-fit').innerHTML = ICON.fit;
 document.querySelector('.seg [data-tool="1"]').innerHTML = ICON.fill;
 document.querySelector('.seg [data-tool="2"]').innerHTML = ICON.mark;
@@ -1749,17 +1818,13 @@ $('#btn-settings').onclick = settingsSheet;
 $('#btn-back').onclick = () => { sfx.tap(); showMap(); };
 $('#btn-hint').onclick = hint;
 $('#btn-more').onclick = moreMenu;
-$('#btn-undo').onclick = () => { if (board && board.undo()) sfx.undo(); };
-$('#btn-redo').onclick = () => { if (board && board.redo()) sfx.undo(); };
 $('#btn-fit').onclick = () => { if (board) { sfx.tap(); board.zoomTo(board.zoomed ? 1 : Math.min(board.maxS, 2.1)); } };
 // The toggle works like a switch: a tap anywhere on it flips between fill and mark.
 $('.seg').onclick = () => { sfx.tap(); setTool(board && board.tool === 1 ? 2 : 1); };
 
 document.addEventListener('keydown', e => {
   if (!board || e.target.tagName === 'INPUT') return;
-  if (e.key === 'z') $('#btn-undo').click();
-  else if (e.key === 'y') $('#btn-redo').click();
-  else if (e.key === 'x') setTool(board.tool === 1 ? 2 : 1);
+  if (e.key === 'x') setTool(board.tool === 1 ? 2 : 1);
 });
 // Keep the page itself from zooming on iOS.
 document.addEventListener('gesturestart', e => e.preventDefault());
