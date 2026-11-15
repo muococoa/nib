@@ -244,6 +244,27 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--green); out
 #hearts { position: absolute; left: 0; right: 0; top: calc(var(--top) + 54px); justify-content: center; margin: 0; gap: 4px; pointer-events: none; }
 #hearts .heart svg { width: 30px; height: 30px; }
 #board-wrap { margin-top: 34px; }
+
+/* ---------- the road and free play, side by side ---------- */
+.map-bottom { gap: 12px; align-items: flex-end; }
+.map-bottom .btn-secondary { width: auto; padding: 0 18px; height: 50px; font-size: 18px; border-radius: 20px; }
+
+/* ---------- bottom menu: Road (shared) and Solo (your own puzzles) ---------- */
+#tabs { position: absolute; left: 0; right: 0; bottom: 0; z-index: 6; height: calc(64px + var(--bottom)); padding-bottom: var(--bottom);
+  display: grid; grid-template-columns: 1fr 1fr; background: #FFFDF6; border-top: 3px solid var(--ink-line); }
+#tabs[hidden] { display: none; }
+#tabs button { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; color: #9A90AB;
+  font-family: var(--display); font-size: 14px; letter-spacing: .02em; }
+#tabs button.on { color: #F0806B; }
+#tabs button svg { width: 26px; height: 26px; }
+.map-bottom { bottom: calc(64px + var(--bottom)); padding-bottom: 14px; background: none; }
+#solo { background: #FBF5EA; }
+#solo-body { padding: calc(var(--top) + 26px) 22px calc(64px + var(--bottom) + 24px); overflow-y: auto; height: 100%; }
+.solo-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 22px; }
+.solo-top h1 { margin: 0; font-family: var(--display); font-weight: 400; font-size: 40px; color: var(--ink-line); line-height: 1; }
+.solo-top p { margin: 8px 0 0; color: #7B6F8C; font-size: 15px; line-height: 1.4; max-width: 220px; }
+#solo .levels .level { height: 66px; font-size: 22px; }
+#solo .levels { gap: 14px; }
 </style>
 </head>
 <body>
@@ -259,6 +280,10 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--green); out
     <footer class="map-bottom">
       <button id="btn-continue" class="btn-primary"></button>
     </footer>
+  </section>
+
+  <section id="solo" class="screen" aria-label="Solo puzzles">
+    <div id="solo-body"></div>
   </section>
 
   <section id="play" class="screen" aria-label="Puzzle">
@@ -283,6 +308,10 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--green); out
       </div>
     </footer>
   </section>
+  <nav id="tabs" aria-label="Game modes">
+    <button data-tab="map" class="on"></button>
+    <button data-tab="solo"></button>
+  </nav>
 </div>
 <div id="sheet-root"></div>
 <div id="toast" role="status" aria-live="polite"></div>
@@ -714,6 +743,25 @@ function generate(level, seed) {
   return spare || ART[L.fallback].art.map(r => [...r].map(c => (c === '#' ? 1 : 0)));
 }
 
+// The journey: 30 stops, the same puzzles in the same order for every player, so friends can compare.
+// Hand-drawn pictures are mixed with generated ones whose ids always rebuild the identical puzzle.
+const FIXED_JOURNEY = [
+  'hello', 'heart', 'pine', 'boat',
+  'teacup', 'mushroom', 'rocket', 'umbrella', 'g:easy:101', 'fish', 'g:easy:102', 'house',
+  'sail', 'g:medium:201', 'g:medium:202', 'g:medium:203', 'g:medium:204', 'g:medium:205', 'g:medium:206', 'g:medium:207',
+  'lighthouse', 'cactus', 'g:hard:301', 'anchor', 'robot', 'g:hard:302', 'cottage',
+  'g:expert:401', 'liftoff', 'g:expert:402',
+  // Stops 31 to 100: generated, fixed for everyone, in rising difficulty with an easier one now and then.
+  ...Array.from({ length: 70 }, (_, k) => {
+    const n = k + 31;
+    if (n % 10 === 0) return `g:expert:${4000 + n}`;                 // every tenth stop is a big one
+    if (n % 5 === 3) return `g:${n < 60 ? 'easy' : 'medium'}:${1000 + n}`;   // a breather
+    if (n <= 50) return `g:medium:${2000 + n}`;
+    if (n <= 85) return `g:hard:${3000 + n}`;
+    return `g:expert:${4000 + n}`;
+  }),
+];
+
 function newPuzzleId(level) { return `g:${level}:${1 + Math.floor(Math.random() * 2147483000)}`; }
 
 function getPuzzle(id) {
@@ -734,7 +782,7 @@ function getPuzzle(id) {
 
 const ALL_IDS = Object.keys(ART);
 
-return { SPARE, JOURNEY, setJourney, LEVELS, newPuzzleId, getPuzzle, ALL_IDS };
+return { SPARE, JOURNEY, setJourney, LEVELS, FIXED_JOURNEY, newPuzzleId, getPuzzle, ALL_IDS };
 })();
 __m['store'] = (() => {
 // Saved progress, kept on the device.
@@ -891,6 +939,8 @@ const ICON = {
   settings: '<svg width="26" height="26" viewBox="0 0 24 24" aria-hidden="true"><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" fill="#F2B441" stroke="#1E122C" stroke-width="1.7" stroke-linejoin="round"/><circle cx="12" cy="12" r="3.1" fill="#FFFDF6" stroke="#1E122C" stroke-width="1.7"/></svg>',
   fit: I('<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>'),
   fill: '<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="2" width="12" height="12" rx="2.5" fill="currentColor"/></svg>',
+  road: '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21c0-4.5 6-4 6-9S9 8 9 3"/><circle cx="9" cy="3" r="1.2" fill="currentColor"/></svg>',
+  solo: '<svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="3" y="3" width="8" height="8" rx="2.4"/><rect x="13" y="3" width="8" height="8" rx="2.4" opacity=".45"/><rect x="3" y="13" width="8" height="8" rx="2.4" opacity=".45"/><rect x="13" y="13" width="8" height="8" rx="2.4"/></svg>',
   heart: '<svg width="26" height="26" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20.5s-7.5-4.6-7.5-10.2A4.3 4.3 0 0 1 12 7.6a4.3 4.3 0 0 1 7.5 2.7c0 5.6-7.5 10.2-7.5 10.2z" fill="currentColor" stroke="#1E122C" stroke-width="1.8" stroke-linejoin="round"/></svg>',
   mark: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M3.5 3.5l9 9M12.5 3.5l-9 9"/></svg>',
   lock: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2.5"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>',
@@ -1418,8 +1468,11 @@ const MAP_W = 390;
 const STEP = 150, BOTTOM = 210, TOP = 380;
 const ZONES = [
   { at: 0, name: 'Meadow Gate', props: ['grass', 'grass-daisy', 'tulips', 'daisies', 'clover', 'bush', 'grass'] },
-  { at: 10, name: 'Pond Side', props: ['pond', 'cattails', 'pebbles', 'log', 'mushrooms', 'grass', 'cattails'] },
-  { at: 20, name: 'Hilltop', props: ['tree', 'sapling', 'signpost', 'nest', 'tulips', 'bush', 'grass-daisy'] },
+  { at: 17, name: 'Pond Side', props: ['pond', 'cattails', 'pebbles', 'log', 'mushrooms', 'grass', 'cattails'] },
+  { at: 34, name: 'Hilltop', props: ['tree', 'sapling', 'signpost', 'nest', 'tulips', 'bush', 'grass-daisy'] },
+  { at: 51, name: 'Tulip Fields', props: ['tulips', 'tulips', 'daisies', 'grass-daisy', 'clover', 'sapling', 'grass'] },
+  { at: 68, name: 'Mushroom Wood', props: ['mushrooms', 'tree', 'log', 'bush', 'mushrooms', 'pebbles', 'tree'] },
+  { at: 85, name: 'Windy Ridge', props: ['pebbles', 'signpost', 'grass', 'sapling', 'nest', 'cattails', 'bush'] },
 ];
 // Drawn size of each prop on the map, in map units.
 const PROP_SIZE = { grass: 40, 'grass-daisy': 46, bush: 62, sapling: 54, tulips: 50, daisies: 48, mushrooms: 48, clover: 40,
@@ -1430,7 +1483,7 @@ const DIGIT_W = [0.9, 0.78, 0.86, 0.83, 0.93, 0.86, 0.89, 0.87, 0.9, 0.86];
 function numberMarkup(n, h) {
   const ds = String(n).split('').map(Number), ws = ds.map(d => DIGIT_W[d] * h), gap = -h * 0.1;
   let x = -(ws.reduce((a, b) => a + b, 0) + gap * (ds.length - 1)) / 2, out = '';
-  ds.forEach((d, k) => { out += `<image href="${asset('digit-' + d)}" x="${x.toFixed(1)}" y="${(-h / 2).toFixed(1)}" width="${ws[k].toFixed(1)}" height="${h}"/>`; x += ws[k] + gap; });
+  ds.forEach((d, k) => { out += `<use href="#dg-${d}" transform="translate(${x.toFixed(1)} ${(-h / 2).toFixed(1)}) scale(${(h / 100).toFixed(3)})"/>`; x += ws[k] + gap; });
   return out;
 }
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -1470,7 +1523,7 @@ function pathXAt(pts, y) {
 // Scenery: sticker props scattered beside the path, themed by zone.
 function decor(pts, H) {
   const r = rng(29), out = [], placed = [];
-  for (let n = 0, tries = 0; n < JOURNEY.length * 2.4 && tries < 4000; tries++) {
+  for (let n = 0, tries = 0; n < JOURNEY.length * 2.4 && tries < 20000; tries++) {
     const y = 120 + r() * (H - 260), x = 34 + r() * (MAP_W - 68);
     if (Math.abs(x - pathXAt(pts, y)) < 92) continue;
     if (placed.some(p => Math.hypot(p.x - x, p.y - y) < 96)) continue;
@@ -1482,7 +1535,7 @@ function decor(pts, H) {
     if (name === 'pond' && placed.some(p => p.name === 'pond' && Math.abs(p.y - y) < 420)) continue;
     const size = PROP_SIZE[name] * (0.9 + r() * 0.2);
     placed.push({ x, y, name }); n++;
-    out.push({ y, svg: `<image href="${asset('prop-' + name)}" x="${(x - size / 2).toFixed(1)}" y="${(y - size / 2).toFixed(1)}" width="${size.toFixed(1)}" height="${size.toFixed(1)}"/>` });
+    out.push({ y, svg: `<use href="#pr-${name}" transform="translate(${(x - size / 2).toFixed(1)} ${(y - size / 2).toFixed(1)}) scale(${(size / 100).toFixed(3)})"/>` });
   }
   return out.sort((a, b) => a.y - b.y).map(o => o.svg).join('');
 }
@@ -1497,7 +1550,8 @@ function renderMap(root, state) {
   const road = segments([...pts, ...far]).join('');
   const ghosts = far.map(f => `<g transform="translate(${f.x.toFixed(1)} ${f.y.toFixed(1)})"><circle r="21" cy="5" fill="#A199B5" stroke="#1E122C" stroke-width="3"/><circle r="21" fill="#CFC8DC" stroke="#1E122C" stroke-width="3"/></g>`).join('');
   const nodes = pts.map((pt, i) => {
-    const p = getPuzzle(JOURNEY[i]), st = i < cur ? 'done' : i === cur ? 'now' : 'locked';
+    const st = i < cur ? 'done' : i === cur ? 'now' : 'locked';
+    const p = st === 'locked' ? null : getPuzzle(JOURNEY[i]);      // stops not reached yet are not built
     // Stop markers in the art's style: a rounded stone with an ink outline and a darker lip beneath.
     const stone = (r, face, lip) => `<circle r="${r}" cy="5" fill="${lip}" stroke="${INK_LINE}" stroke-width="3"/><circle r="${r}" fill="${face}" stroke="${INK_LINE}" stroke-width="3"/>`;
     let body;
@@ -1532,6 +1586,8 @@ function renderMap(root, state) {
   root.innerHTML = `<svg viewBox="0 0 ${MAP_W} ${H}" width="100%" xmlns="http://www.w3.org/2000/svg">
     <defs><filter id="sh" x="-40%" y="-40%" width="180%" height="190%"><feDropShadow dx="0" dy="4" stdDeviation="5" flood-color="#0E2A1F" flood-opacity=".18"/></filter>
       <linearGradient id="mist" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#EEF3E8"/><stop offset=".45" stop-color="#EEF3E8" stop-opacity=".9"/><stop offset="1" stop-color="#EEF3E8" stop-opacity="0"/></linearGradient>
+      ${Object.keys(PROP_SIZE).map(name => `<image id="pr-${name}" href="${asset('prop-' + name)}" width="100" height="100"/>`).join('')}
+      ${DIGIT_W.map((w, d) => `<image id="dg-${d}" href="${asset('digit-' + d)}" width="${(w * 100).toFixed(0)}" height="100" preserveAspectRatio="none"/>`).join('')}
       <pattern id="sand" patternUnits="userSpaceOnUse" width="130" height="130"><image href="${asset('tex-path')}" width="130" height="130"/></pattern></defs>
     ${decor(pts, H)}
     <path d="${start}${road}" fill="none" stroke="#A9803F" stroke-opacity=".5" stroke-width="31" stroke-linecap="round"/>
@@ -1574,7 +1630,7 @@ function animateHero(root, from, to, done) {
 return { MAP_W, layout, renderMap, animateHero };
 })();
 __m['main'] = (() => {
-const { JOURNEY, getPuzzle, setJourney, LEVELS, newPuzzleId } = __m['puzzles'];
+const { JOURNEY, getPuzzle, LEVELS, newPuzzleId, FIXED_JOURNEY } = __m['puzzles'];
 const { Board } = __m['board'];
 const { renderMap, animateHero, layout, MAP_W } = __m['map'];
 const { goose, thumbSvg, ICON, TONES, BODIES, asset } = __m['art'];
@@ -1582,21 +1638,11 @@ const { state, save, reset } = __m['store'];
 const { sfx } = __m['sfx'];
 
 const $ = s => document.querySelector(s);
-// The map has a fixed number of stops. Each stop holds whichever puzzle was played there;
-// stops not reached yet hold '?'.
-const STOPS = 30;
-if (!state.path) {                       // a save from before the difficulty menu: keep the stops it already has
-  setJourney(state.seed);
-  const done = JOURNEY.findIndex(id => !state.solved.includes(id));
-  const n = done < 0 ? JOURNEY.length : done;
-  state.path = JOURNEY.slice(0, n);
-  if (n < JOURNEY.length && state.boards[JOURNEY[n]]) state.path.push(JOURNEY[n]);
-  if (!state.path.length) state.path = ['hello'];
-  save();
-}
-function syncJourney() { JOURNEY.length = 0; for (let i = 0; i < STOPS; i++) JOURNEY.push(state.path[i] || '?'); }
+// The map has 30 stops, and every player gets the same puzzle at each one,
+// so friends on the same stop are solving the same thing.
+function syncJourney() { JOURNEY.length = 0; JOURNEY.push(...FIXED_JOURNEY); }
 syncJourney();
-const N = STOPS;
+const N = JOURNEY.length;
 // Public address of the game, used for friend links from the iPhone app. Set once it is hosted.
 const WEB_URL = 'https://muococoa.github.io/nib/';
 // True in the hosted single-page build, where the system share sheet is not available.
@@ -1652,6 +1698,25 @@ function scrollToStop(i, smooth) {
 }
 function show(id) {
   for (const s of document.querySelectorAll('.screen')) s.classList.toggle('on', s.id === id);
+  $('#tabs').hidden = id === 'play';                 // the menu steps aside while a puzzle is open
+  for (const t of document.querySelectorAll('#tabs button')) t.classList.toggle('on', t.dataset.tab === id);
+}
+
+// Solo: your own puzzles by difficulty. A new one every time, and none of it touches the road.
+function showSolo() {
+  closeSheet();
+  teardownBoard();
+  const solo = state.solo || {};
+  $('#solo-body').innerHTML = `
+    <div class="solo-top">
+      <div><h1>Solo</h1><p>Fresh puzzles just for you. They never move you along the road.</p></div>
+      ${goose('wink', 92)}
+    </div>
+    <div class="stack levels">
+      ${Object.entries(LEVELS).map(([key, L]) => `<button class="btn-secondary level" data-level="${key}"><span>${L.name}</span><small>${L.size} × ${L.size}${solo[key] ? ' · ' + solo[key] + ' solved' : ''}</small></button>`).join('')}
+    </div>`;
+  for (const b of document.querySelectorAll('#solo-body .level')) b.onclick = () => { sfx.tap(); startFree(b.dataset.level, b.querySelector('span')); };
+  show('solo');
 }
 function showMap({ travelFrom } = {}) {
   closeSheet();
@@ -1778,12 +1843,13 @@ function teardownBoard() {
   $('#coach').hidden = true;
 }
 
-function play(i) {
+function play(i, freeId) {
   teardownBoard();
-  const p = getPuzzle(JOURNEY[i]), wasSolved = state.solved.includes(p.id);
+  const free = !!freeId;        // free play: a one-off puzzle that never touches the road
+  const p = getPuzzle(free ? freeId : JOURNEY[i]), wasSolved = free || state.solved.includes(p.id);
   playing = i;
   $('#play-name').textContent = p.level || feel(p);
-  $('#play-meta').textContent = `Stop ${i + 1} · ${p.w} × ${p.h}`;
+  $('#play-meta').textContent = `${free ? 'Solo' : 'Stop ' + (i + 1)} · ${p.w} × ${p.h}`;
   coach = p.id === 'hello' && !wasSolved ? { step: 0 } : null;
   $('#coach').hidden = !coach;
   show('play');
@@ -1796,7 +1862,7 @@ function play(i) {
     onTick: v => (v === 1 ? sfx.fill() : v === 2 ? sfx.mark() : sfx.clear()),
     onView: updateControls,
     onChange: () => {
-      state.boards[p.id] = { c: board.serialize(), b: [...board.bad], h: board.hearts }; save();
+      if (!free) { state.boards[p.id] = { c: board.serialize(), b: [...board.bad], h: board.hearts }; save(); }
       const done = board.rowDone.filter(Boolean).length + board.colDone.filter(Boolean).length;
       lastDone = done;
       updateControls(); updateCoach();
@@ -1804,10 +1870,11 @@ function play(i) {
     onSolved: () => {
       delete state.boards[p.id];
       if (!wasSolved) state.solved.push(p.id);
+      if (free) { const lv = freeId.split(':')[1]; state.solo = state.solo || {}; state.solo[lv] = (state.solo[lv] || 0) + 1; }
       save();
       updateControls(); $('#coach').hidden = true;
       sfx.win();
-      setTimeout(() => { if (playing === i) showResult(i, p, !wasSolved); }, 1750);
+      setTimeout(() => { if (playing === i) (free ? showFreeResult(p, freeId) : showResult(i, p, !wasSolved)); }, 1750);
     },
   });
   lastDone = board.rowDone.filter(Boolean).length + board.colDone.filter(Boolean).length;
@@ -1836,7 +1903,7 @@ function showResult(i, p, first) {
 function moreMenu() {
   sfx.tap();
   const sheet = openSheet(`
-    <h2>Stop ${playing + 1}</h2>
+    <h2>${playing >= 0 ? 'Stop ' + (playing + 1) : 'Solo'}</h2>
     <ul class="rules">
       <li>Each number is a run of filled cells in that row or column.</li>
       <li>Runs appear in order, with at least one empty cell between them.</li>
@@ -1992,37 +2059,55 @@ $('#btn-continue').onclick = () => {
   const c = curStop();
   sfx.tap();
   if (c >= N) openStop(N - 1);
-  else if (JOURNEY[c] !== '?') play(c);          // the tutorial, or a puzzle already started
-  else chooseLevel(c);
+  else play(c);
 };
 
-// The difficulty menu. Every choice makes a new puzzle that has never been seen before.
-function chooseLevel(stop) {
+// A difficulty menu that makes a brand-new puzzle each time. Not used on the journey, where stops
+// must be identical for everyone; kept for a free-play mode.
+function chooseLevel() {
   const sheet = openSheet(`
-    <h2 class="center">New puzzle</h2>
+    <h2 class="center">Free play</h2>
+    <p class="sub center">A fresh puzzle every time. It does not move you along the road.</p>
     <div class="stack levels">
       ${Object.entries(LEVELS).map(([key, L]) => `<button class="btn-secondary level" data-level="${key}"><span>${L.name}</span><small>${L.size} × ${L.size}</small></button>`).join('')}
     </div>
     <button class="btn-text" data-a="cancel">Cancel</button>`);
   sheet.querySelector('[data-a=cancel]').onclick = closeSheet;
-  for (const b of sheet.querySelectorAll('.level')) b.onclick = () => {
-    b.querySelector('span').textContent = 'Making it…';
-    setTimeout(() => {                      // let the label paint before the puzzle is built
-      state.path[stop] = newPuzzleId(b.dataset.level);
-      getPuzzle(state.path[stop]);
-      save(); syncJourney(); closeSheet(); play(stop);
-    }, 30);
-  };
+  for (const b of sheet.querySelectorAll('.level')) b.onclick = () => { sfx.tap(); startFree(b.dataset.level, b.querySelector('span')); };
+}
+
+const FREE = -2;      // what `playing` holds during free play
+function startFree(level, label) {
+  if (label) label.textContent = 'Making it…';
+  setTimeout(() => {                        // let the label paint before the puzzle is built
+    const id = newPuzzleId(level);
+    getPuzzle(id);
+    closeSheet();
+    play(FREE, id);
+  }, 30);
+}
+
+function showFreeResult(p, id) {
+  const level = id.split(':')[1];
+  const sheet = openSheet(`
+    <div class="center">
+      <div class="tile">${thumbSvg(p, 96, TONES[p.tone])}${goose('party', 92, 'cheer')}</div>
+      <p class="eyebrow">Solo</p>
+      <h2>Solved!</h2>
+      <p class="sub">${p.level} · ${p.w} × ${p.h}</p>
+    </div>
+    <div class="stack">
+      <button class="btn-primary" data-a="again">Another one</button>
+      <button class="btn-secondary" data-a="map">Done</button>
+    </div>`, { dismiss: false });
+  sheet.querySelector('[data-a=again]').onclick = () => startFree(level);
+  sheet.querySelector('[data-a=map]').onclick = () => showSolo();
 }
 $('#btn-settings').onclick = settingsSheet;
-$('#btn-back').onclick = () => {
-  sfx.tap();
-  const id = playing >= 0 ? JOURNEY[playing] : null;
-  if (id && id.startsWith('g:') && !state.solved.includes(id) && board && !board.cells.some(v => v)) {
-    state.path.length = playing; delete state.boards[id]; save(); syncJourney();      // untouched: pick again next time
-  }
-  showMap();
-};
+$('#btn-back').onclick = () => { sfx.tap(); if (playing === FREE) showSolo(); else showMap(); };
+document.querySelector('#tabs [data-tab=map]').innerHTML = ICON.road + '<span>Road</span>';
+document.querySelector('#tabs [data-tab=solo]').innerHTML = ICON.solo + '<span>Solo</span>';
+for (const t of document.querySelectorAll('#tabs button')) t.onclick = () => { sfx.tap(); if (t.dataset.tab === 'solo') showSolo(); else showMap(); };
 $('#btn-hint').onclick = hint;
 $('#btn-more').onclick = moreMenu;
 $('#btn-fit').onclick = () => { if (board) { sfx.tap(); board.zoomTo(board.zoomed ? 1 : Math.min(board.maxS, 2.1)); } };
